@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How a stablecoin payment works (V1)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#F4F4F2;font-family:'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;color:#1A1A1A}
+.page{max-width:1640px;margin:0 auto;padding:20px 24px 28px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+.figcard{background:#fff;border-radius:10px;padding:16px 16px 18px;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+#fig{width:100%;height:auto;display:block}
+/* step states */
+.rib,.step{transition:opacity .45s ease}
+.st-past{opacity:.32}
+.st-future{opacity:.06}
+.st-current,.st-all{opacity:1}
+.sc,.sn{transition:fill .3s}
+.step.st-current .sc{fill:#1A1A1A}
+.step.st-current .sn{fill:#fff}
+.halo{display:none}
+#step-4.st-current .halo{display:inline}
+.sname{fill:#9A9A9A;transition:fill .3s}
+.sname.on{fill:#1A1A1A}
+body.free .step .hit{cursor:pointer}
+body.free .step .hit:hover .sc{stroke-width:3}
+/* draw-in animation */
+.draw{stroke-dasharray:1 1;stroke-dashoffset:0}
+.rib.anim .draw{animation:draw .9s ease-in-out both}
+.rib.anim .head,.rib.anim .lbl{animation:fade .3s ease-out .8s both}
+@keyframes draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+/* caption + controls */
+.caption{margin:14px 6px 0;min-height:52px;display:flex;gap:14px;align-items:flex-start}
+.cap-badge{flex:none;background:#1A1A1A;color:#fff;border-radius:14px;padding:4px 11px;font-size:13px;font-weight:700;white-space:nowrap}
+.cap-text{font-size:16px;line-height:1.45}
+.controls{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px}
+.controls button{font:inherit;font-size:14px;font-weight:600;padding:8px 20px;border-radius:7px;border:1.5px solid #1A1A1A;background:#fff;cursor:pointer;min-width:110px}
+.controls button.primary{background:#1A1A1A;color:#fff}
+.controls button:disabled{opacity:.3;cursor:default}
+.progress{display:flex;gap:6px;align-items:center}
+.dot{width:9px;height:9px;border-radius:50%;background:#D0D0D0}
+.dot.past{background:#8A8A8A}.dot.on{background:#1A1A1A;transform:scale(1.25)}
+.dot.ov{border-radius:2px;width:14px}
+.hint{text-align:center;font-size:12px;color:#777;margin-top:8px}
+/* phone */
+.side h2{font-size:15px;margin:4px 0 10px;font-weight:700}
+.phone{width:300px;height:560px;border-radius:38px;background:#1A1A1A;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+.screen{width:100%;height:100%;border-radius:28px;background:#F7F8FA;overflow:hidden;display:flex;flex-direction:column}
+.notch{height:22px;display:flex;justify-content:center;align-items:center}
+.notch span{width:80px;height:6px;border-radius:3px;background:#1A1A1A;opacity:.85}
+.apphead{background:#2E3A59;color:#fff;padding:10px 16px 12px}
+.apphead .bank{font-size:12px;opacity:.8;letter-spacing:.3px}
+.apphead .who{font-size:17px;font-weight:700;margin-top:2px}
+.appbody{flex:1;padding:16px;display:flex;flex-direction:column;gap:12px;font-size:13.5px;overflow:auto}
+.scr-title{font-size:16px;font-weight:700}
+.field{background:#fff;border:1px solid #DADDE3;border-radius:9px;padding:9px 12px}
+.field .k{font-size:11px;color:#6B7280}
+.field .v{font-size:15px;font-weight:600;margin-top:2px}
+.btn{background:#2E3A59;color:#fff;border-radius:9px;padding:11px;text-align:center;font-weight:700;margin-top:auto}
+.bal{background:#fff;border-radius:12px;padding:14px;border:1px solid #DADDE3}
+.bal .k{font-size:12px;color:#6B7280}.bal .v{font-size:26px;font-weight:700;margin-top:2px}
+.row{display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #DADDE3;border-radius:9px;padding:10px 12px}
+.row .amt{font-weight:700}.pos{color:#15803D}
+.pending{color:#B45309;font-weight:600;display:flex;align-items:center;gap:6px}
+.spin{width:12px;height:12px;border:2px solid #F3C98B;border-top-color:#B45309;border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.phone-cap{font-size:13.5px;line-height:1.4;padding:10px 4px 0;display:flex;gap:6px}
+.phone-cap b{flex:none}
+.ovlist{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.ovlist .grp{font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+.ovlist .it{display:flex;gap:6px;background:#fff;border:1px solid #DADDE3;border-radius:8px;padding:7px 9px}
+.ovlist .it b{flex:none}
+/* terms + popup */
+.term{cursor:pointer;outline:none}
+.term:hover rect,.term:focus rect{stroke-width:2;fill:#E9E0FF}
+.term.locked{cursor:not-allowed}
+.term.locked:hover rect{stroke-width:1;fill:#F3EEFF}
+.pop{position:absolute;z-index:5;width:300px;background:#fff;border:1.5px solid #9B6FD6;border-radius:9px;
+     box-shadow:0 6px 20px rgba(60,20,110,.18);padding:12px 14px;font-size:13.5px;line-height:1.4}
+.pop h3{margin:0 0 6px;font-family:'IBM Plex Mono', Menlo, Consolas, monospace;font-size:14px;color:#6A2FB0}
+.pop .ex{font-size:13px;background:#F6F3FC;border-radius:5px;padding:4px 6px;margin-top:3px}
+.pop .ex.hex{font-family:'IBM Plex Mono', Menlo, Consolas, monospace;font-size:11.5px;word-break:break-all}
+.pop .sec{margin-top:9px}
+.pop .lab{font-weight:700}
+.pop .x{position:absolute;top:6px;right:8px;border:0;background:none;font-size:18px;cursor:pointer;color:#666}
+.toast{position:absolute;z-index:6;background:#333;color:#fff;font-size:12px;padding:5px 9px;border-radius:5px;pointer-events:none}
+.logbtn{position:fixed;right:10px;bottom:8px;font:inherit;font-size:11px;color:#999;background:none;border:0;cursor:pointer;opacity:.55}
+.logbtn:hover{opacity:1;text-decoration:underline}
+</style></head>
+<body>
+<div class="page">
+ <div class="layout">
+  <div>
+   <div class="figcard">
+    <svg id="fig" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1340 500" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" role="img" aria-label="Stablecoin payment flow">
+<defs>
+<linearGradient id="g2b" gradientUnits="userSpaceOnUse" x1="443.0" y1="0" x2="479.0" y2="0"><stop offset="0" stop-color="#15993F"/><stop offset="1" stop-color="#1F5FA8"/></linearGradient>
+<linearGradient id="b2g" gradientUnits="userSpaceOnUse" x1="1134.0" y1="0" x2="1170.0" y2="0"><stop offset="0" stop-color="#1F5FA8"/><stop offset="1" stop-color="#15993F"/></linearGradient>
+</defs>
+<text x="340.0" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">A: Get USDC</text>
+<line x1="186" y1="38" x2="494" y2="38" stroke="#1A1A1A" stroke-width="2"/>
+<text x="740.0" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">B: Transfer USDC</text>
+<line x1="506" y1="38" x2="974" y2="38" stroke="#1A1A1A" stroke-width="2"/>
+<text x="1140.0" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">C: Redeem USDC</text>
+<line x1="986" y1="38" x2="1294" y2="38" stroke="#1A1A1A" stroke-width="2"/>
+<text x="14" y="82" font-size="12.5" font-weight="600" fill="#1A1A1A">With stablecoins</text>
+<text class="sname" data-step="1" x="260.0" y="82" text-anchor="middle" font-size="13" font-weight="600">Pay USD</text>
+<text class="sname" data-step="2" x="420.0" y="82" text-anchor="middle" font-size="13" font-weight="600">Receive USDC</text>
+<text class="sname" data-step="3" x="580.0" y="82" text-anchor="middle" font-size="13" font-weight="600">Send USDC</text>
+<text class="sname" data-step="4" x="740.0" y="82" text-anchor="middle" font-size="13" font-weight="600">Network checks</text>
+<text class="sname" data-step="5" x="900.0" y="82" text-anchor="middle" font-size="13" font-weight="600">Friend receives</text>
+<text class="sname" data-step="6" x="1060.0" y="82" text-anchor="middle" font-size="13" font-weight="600">Redeem USD</text>
+<text class="sname" data-step="7" x="1220.0" y="82" text-anchor="middle" font-size="13" font-weight="600">Receive USD</text>
+<rect x="0" y="100" width="1340" height="68" fill="#FFF8D7"/>
+<line x1="0" y1="168" x2="1340" y2="168" stroke="#fff" stroke-width="2"/>
+<text x="14" y="130.0" font-size="12.5" font-weight="600" fill="#1A1A1A">Regular money</text>
+<text x="14" y="146.0" font-size="12.5" font-weight="600" fill="#1A1A1A">(USD)</text>
+<rect x="0" y="168" width="1340" height="68" fill="#FFF8D7"/>
+<line x1="0" y1="236" x2="1340" y2="236" stroke="#fff" stroke-width="2"/>
+<text x="14" y="206.0" font-size="12.5" font-weight="600" fill="#1A1A1A">Your wallet</text>
+<rect x="0" y="236" width="1340" height="68" fill="#FFF8D7"/>
+<line x1="0" y1="304" x2="1340" y2="304" stroke="#fff" stroke-width="2"/>
+<text x="14" y="274.0" font-size="12.5" font-weight="600" fill="#1A1A1A">Blockchain network</text>
+<rect x="0" y="304" width="1340" height="68" fill="#FFF8D7"/>
+<line x1="0" y1="372" x2="1340" y2="372" stroke="#fff" stroke-width="2"/>
+<text x="14" y="342.0" font-size="12.5" font-weight="600" fill="#1A1A1A">Friend's wallet</text>
+<line x1="500" y1="48" x2="500" y2="372" stroke="#B8B8B8" stroke-width="1.2"/>
+<line x1="980" y1="48" x2="980" y2="372" stroke="#B8B8B8" stroke-width="1.2"/>
+<g class="rib" id="rib-1" data-step="1"><mask id="m1" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M150,134.0 H223.0" pathLength="1" stroke="#fff" stroke-width="42" fill="none"/></mask><path d="M150,134.0 H223.0" stroke="#15993F" stroke-width="12" fill="none" mask="url(#m1)"/><polygon class="head" points="240.0,134.0 214.0,118.0 222.0,134.0 214.0,150.0" fill="#15993F"/><text class="lbl" x="152" y="121.0" font-size="11.5" font-weight="700" fill="#15993F">100 USD</text></g>
+<g class="rib" id="rib-2" data-step="2"><mask id="m2" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M279.0,134.0 H383.0" pathLength="1" stroke="#fff" stroke-width="42" fill="none"/></mask><path d="M279.0,134.0 H383.0" stroke="#15993F" stroke-width="12" fill="none" mask="url(#m2)"/><polygon class="head" points="400.0,134.0 374.0,118.0 382.0,134.0 374.0,150.0" fill="#15993F"/></g>
+<g class="rib" id="rib-3" data-step="3"><mask id="m3" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M439.0,134.0 H443.0 C482.5,134.0 482.5,202.0 522.0,202.0 H543.0" pathLength="1" stroke="#fff" stroke-width="42" fill="none"/></mask><path d="M439.0,134.0 H443.0 C482.5,134.0 482.5,202.0 522.0,202.0 H543.0" stroke="url(#g2b)" stroke-width="12" fill="none" mask="url(#m3)"/><polygon class="head" points="560.0,202.0 534.0,186.0 542.0,202.0 534.0,218.0" fill="#1F5FA8"/><g class="lbl"><rect x="451.5" y="158.0" width="62" height="20" rx="10" fill="#fff" stroke="#1F5FA8" stroke-width="1.5"/><text x="482.5" y="172.0" text-anchor="middle" font-size="11" font-weight="600" fill="#1F5FA8">100 USDC</text></g></g>
+<g class="rib" id="rib-4" data-step="4"><mask id="m4" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M599.0,202.0 H603.0 C642.5,202.0 642.5,270.0 682.0,270.0 H703.0" pathLength="1" stroke="#fff" stroke-width="42" fill="none"/></mask><path d="M599.0,202.0 H603.0 C642.5,202.0 642.5,270.0 682.0,270.0 H703.0" stroke="#D62828" stroke-opacity="0.8" stroke-width="12" stroke-dasharray="14 8" fill="none" mask="url(#m4)"/><polygon class="head" points="720.0,270.0 694.0,254.0 702.0,270.0 694.0,286.0" fill="#D62828" fill-opacity="0.8"/><mask id="m5" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M580.0,221.0 C580.0,338.0 740.0,342.0 740.0,299.0" pathLength="1" stroke="#fff" stroke-width="16" fill="none"/></mask><path d="M580.0,221.0 C580.0,338.0 740.0,342.0 740.0,299.0" stroke="#D62828" stroke-width="3" fill="none" mask="url(#m5)"/><polygon class="head" points="740.0,290.0 734.0,301.0 740.0,298.0 746.0,301.0" fill="#D62828"/><text class="lbl" x="650.0" y="355.0" text-anchor="middle" font-size="11.5" font-weight="600" fill="#D62828">small fee</text></g>
+<g class="rib" id="rib-5" data-step="5"><mask id="m6" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M759.0,270.0 H763.0 C802.5,270.0 802.5,338.0 842.0,338.0 H863.0" pathLength="1" stroke="#fff" stroke-width="42" fill="none"/></mask><path d="M759.0,270.0 H763.0 C802.5,270.0 802.5,338.0 842.0,338.0 H863.0" stroke="#1F5FA8" stroke-width="12" fill="none" mask="url(#m6)"/><polygon class="head" points="880.0,338.0 854.0,322.0 862.0,338.0 854.0,354.0" fill="#1F5FA8"/></g>
+<g class="rib" id="rib-6" data-step="6"><mask id="m7" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M919.0,338.0 H1023.0" pathLength="1" stroke="#fff" stroke-width="42" fill="none"/></mask><path d="M919.0,338.0 H1023.0" stroke="#1F5FA8" stroke-width="12" fill="none" mask="url(#m7)"/><polygon class="head" points="1040.0,338.0 1014.0,322.0 1022.0,338.0 1014.0,354.0" fill="#1F5FA8"/><g class="lbl"><rect x="935.5" y="328.0" width="62" height="20" rx="10" fill="#fff" stroke="#1F5FA8" stroke-width="1.5"/><text x="966.5" y="342.0" text-anchor="middle" font-size="11" font-weight="600" fill="#1F5FA8">100 USDC</text></g></g>
+<g class="rib" id="rib-7" data-step="7"><mask id="m8" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M1079.0,338.0 H1083.0 C1122.5,338.0 1122.5,134.0 1162.0,134.0 H1183.0" pathLength="1" stroke="#fff" stroke-width="42" fill="none"/></mask><path d="M1079.0,338.0 H1083.0 C1122.5,338.0 1122.5,134.0 1162.0,134.0 H1183.0" stroke="url(#b2g)" stroke-width="12" fill="none" mask="url(#m8)"/><polygon class="head" points="1200.0,134.0 1174.0,118.0 1182.0,134.0 1174.0,150.0" fill="#15993F"/><mask id="m9" maskUnits="userSpaceOnUse" x="0" y="0" width="1340" height="500"><path class="draw" d="M1239.0,134.0 H1319.0" pathLength="1" stroke="#fff" stroke-width="42" fill="none"/></mask><path d="M1239.0,134.0 H1319.0" stroke="#15993F" stroke-width="12" fill="none" mask="url(#m9)"/><polygon class="head" points="1336.0,134.0 1310.0,118.0 1318.0,134.0 1310.0,150.0" fill="#15993F"/><text class="lbl" x="1247.0" y="121.0" font-size="11.5" font-weight="700" fill="#15993F">100 USD</text></g>
+<g class="step" id="step-1" data-step="1"><g class="hit" role="button" aria-label="Go to step 1"><circle class="sc" cx="260.0" cy="134.0" r="19" fill="#fff" stroke="#1A1A1A" stroke-width="2"/><text class="sn" x="260.0" y="139.0" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">1</text></g></g>
+<g class="step" id="step-2" data-step="2"><g class="hit" role="button" aria-label="Go to step 2"><circle class="sc" cx="420.0" cy="134.0" r="19" fill="#fff" stroke="#1A1A1A" stroke-width="2"/><text class="sn" x="420.0" y="139.0" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">2</text></g></g>
+<g class="step" id="step-3" data-step="3"><g class="hit" role="button" aria-label="Go to step 3"><circle class="sc" cx="580.0" cy="202.0" r="19" fill="#fff" stroke="#1A1A1A" stroke-width="2"/><text class="sn" x="580.0" y="207.0" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">3</text></g></g>
+<g class="step" id="step-4" data-step="4"><circle class="halo" cx="740.0" cy="270.0" r="24" fill="none" stroke="#1A1A1A" stroke-width="1.6" stroke-dasharray="4 3"/><g class="hit" role="button" aria-label="Go to step 4"><circle class="sc" cx="740.0" cy="270.0" r="19" fill="#fff" stroke="#1A1A1A" stroke-width="2" stroke-dasharray="4 3"/><text class="sn" x="740.0" y="275.0" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">4</text></g></g>
+<g class="step" id="step-5" data-step="5"><g class="hit" role="button" aria-label="Go to step 5"><circle class="sc" cx="900.0" cy="338.0" r="19" fill="#fff" stroke="#1A1A1A" stroke-width="2"/><text class="sn" x="900.0" y="343.0" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">5</text></g></g>
+<g class="step" id="step-6" data-step="6"><g class="hit" role="button" aria-label="Go to step 6"><circle class="sc" cx="1060.0" cy="338.0" r="19" fill="#fff" stroke="#1A1A1A" stroke-width="2"/><text class="sn" x="1060.0" y="343.0" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">6</text></g></g>
+<g class="step" id="step-7" data-step="7"><g class="hit" role="button" aria-label="Go to step 7"><circle class="sc" cx="1220.0" cy="134.0" r="19" fill="#fff" stroke="#1A1A1A" stroke-width="2"/><text class="sn" x="1220.0" y="139.0" text-anchor="middle" font-size="14" font-weight="700" fill="#1A1A1A">7</text></g></g>
+<line x1="0" y1="390" x2="1340" y2="390" stroke="#DDD"/>
+<text x="14" y="422" font-size="12.5" font-weight="600" fill="#1A1A1A">Legend</text>
+<circle cx="194" cy="418" r="11" fill="#fff" stroke="#1A1A1A" stroke-width="2"/><text x="220" y="422" font-size="12" fill="#1A1A1A">Step (number = order)</text>
+<circle cx="484" cy="418" r="11" fill="#fff" stroke="#1A1A1A" stroke-width="2" stroke-dasharray="4 3"/><text x="510" y="422" font-size="12" fill="#1A1A1A">Step pending (dashed)</text>
+<rect x="760" y="412" width="30" height="12" fill="#15993F"/><text x="800" y="422" font-size="12" fill="#1A1A1A">USD (green ribbon)</text>
+<rect x="1050" y="412" width="30" height="12" fill="#1F5FA8"/><text x="1090" y="422" font-size="12" fill="#1A1A1A">USDC (blue ribbon)</text>
+<line x1="180" y1="454" x2="210" y2="454" stroke="#D62828" stroke-opacity="0.8" stroke-width="12" stroke-dasharray="14 8"/><text x="220" y="458" font-size="12" fill="#1A1A1A">USDC in transit (dashed)</text>
+<line x1="470" y1="454" x2="500" y2="454" stroke="#D62828" stroke-width="3"/><text x="510" y="458" font-size="12" fill="#1A1A1A">Fee (thin red line)</text>
+</svg>
+    <div class="caption" aria-live="polite"><span class="cap-badge" id="capBadge"></span><span class="cap-text" id="capText"></span></div>
+   </div>
+   <div class="controls">
+    <button id="back">← Back</button>
+    <div class="progress"><span class="dot" data-i="1"></span><span class="dot" data-i="2"></span><span class="dot" data-i="3"></span><span class="dot" data-i="4"></span><span class="dot" data-i="5"></span><span class="dot" data-i="6"></span><span class="dot" data-i="7"></span><span class="dot ov" data-i="8" title="Overview"></span></div>
+    <button id="next" class="primary">Next →</button>
+   </div>
+   <div class="hint" id="hint"></div>
+  </div>
+  <aside class="side">
+   <h2>In online banking, this is like…</h2>
+   <div class="phone"><div class="screen">
+    <div class="notch"><span></span></div>
+    <div class="apphead"><div class="bank">Online Bank</div><div class="who" id="who"></div></div>
+    <div class="appbody" id="appbody"></div>
+   </div></div>
+   <div class="phone-cap" id="phoneCap"></div>
+  </aside>
+ </div>
+</div>
+<button class="logbtn" id="logbtn" title="Download interaction log (Shift+L)">Download log</button>
+<script>
+(function(){
+const VERSION = "V1";
+const HAS_TERMS = false;
+const CAPTIONS = {"1": "You pay 100 US dollars to a stablecoin provider to buy USDC, a digital dollar designed to stay worth $1. The provider holds reserves worth about the same amount in US dollars.", "2": "The provider issues 100 USDC to your wallet. Your dollars are now held as stablecoins.", "3": "You send 100 USDC from your wallet to your friend’s wallet. You also pay a small network fee for checking and recording the payment.", "4": "The blockchain network checks the payment and records it. Until it is confirmed, the payment is pending, meaning it is not complete yet.", "5": "The payment is recorded on the blockchain, and 100 USDC arrive in your friend’s wallet. Once confirmed, the payment usually cannot be canceled.", "6": "Your friend sends the 100 USDC back to a stablecoin provider to redeem them for US dollars.", "7": "Your friend receives 100 US dollars in regular money.", "8": "The whole journey: 100 USD becomes 100 USDC, moves across the blockchain network to your friend's wallet, and becomes 100 USD again. Click any step circle to revisit it."};
+const TERMS = {};
+const OVERVIEW = 8;
+const params = new URLSearchParams(location.search);
+const PID = params.get('pid') || '';
+
+// ---------- interaction log ----------
+const t0 = performance.now();
+const LOG = [];
+function log(event, o){
+  o = o || {};
+  LOG.push({participant:PID, version:VERSION, seq:LOG.length+1,
+            iso_time:new Date().toISOString(), elapsed_ms:Math.round(performance.now()-t0),
+            event:event, from_step:o.from===undefined?'':stepName(o.from),
+            to_step:o.to===undefined?'':stepName(o.to), method:o.method||'', term:o.term||''});
+}
+function stepName(s){ return s===OVERVIEW ? 'overview' : String(s); }
+function downloadLog(){
+  const cols = ['participant','version','seq','iso_time','elapsed_ms','event','from_step','to_step','method','term'];
+  const esc = v => { v = String(v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  const csv = [cols.join(',')].concat(LOG.map(r => cols.map(c => esc(r[c])).join(','))).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'interaction_log_' + VERSION + (PID ? '_' + PID : '') + '_' + new Date().toISOString().replace(/[:.]/g,'-') + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+window.__getLog = () => LOG.slice();   // for testing / manual export
+
+// ---------- phone screens (online banking analogy) ----------
+const PHONE = {
+ 1:{who:"Your app", cap:"Add funds to an online payment account", body:`
+   <div class="scr-title">Add money</div>
+   <div class="field"><div class="k">Amount</div><div class="v">$100.00</div></div>
+   <div class="field"><div class="k">From</div><div class="v">Debit card •••• 1234</div></div>
+   <div class="btn">Add funds</div>`},
+ 2:{who:"Your app", cap:"Added funds appear in the account balance", body:`
+   <div class="bal"><div class="k">Available balance</div><div class="v">$100.00</div></div>
+   <div class="scr-title" style="font-size:14px">Recent activity</div>
+   <div class="row"><span>Funds added</span><span class="amt pos">+$100.00</span></div>`},
+ 3:{who:"Your app", cap:"Enter an account number and confirm a transfer", body:`
+   <div class="scr-title">Send money</div>
+   <div class="field"><div class="k">To account number</div><div class="v">1234 5678 90</div></div>
+   <div class="field"><div class="k">Amount</div><div class="v">$100.00</div></div>
+   <div class="field"><div class="k">Transfer fee</div><div class="v">small fee</div></div>
+   <div class="btn">Confirm transfer</div>`},
+ 4:{who:"Your app", cap:"Transfer shows “processing”", body:`
+   <div class="scr-title">Activity</div>
+   <div class="row"><div><div>Transfer to friend</div><div class="pending"><span class="spin"></span>Processing…</div></div>
+   <span class="amt">−$100.00</span></div>`},
+ 5:{who:"Friend’s app", cap:"The payee’s balance increases", body:`
+   <div class="bal"><div class="k">Available balance</div><div class="v">$100.00</div></div>
+   <div class="scr-title" style="font-size:14px">Recent activity</div>
+   <div class="row"><span>Transfer received</span><span class="amt pos">+$100.00</span></div>`},
+ 6:{who:"Friend’s app", cap:"Withdraw the balance to a bank account", body:`
+   <div class="scr-title">Withdraw</div>
+   <div class="field"><div class="k">Amount</div><div class="v">$100.00</div></div>
+   <div class="field"><div class="k">To bank account</div><div class="v">Checking •••• 4821</div></div>
+   <div class="btn">Withdraw</div>`},
+ 7:{who:"Friend’s app", cap:"Funds arrive in the bank account", body:`
+   <div class="scr-title">Checking •••• 4821</div>
+   <div class="bal"><div class="k">Balance change</div><div class="v pos">+$100.00</div></div>
+   <div class="row"><span>Withdrawal from Online Bank</span><span class="amt pos">Arrived</span></div>`}
+};
+function overviewBody(){
+  let h = '<div class="ovlist"><div class="grp">Your app</div>';
+  for (let i=1;i<=7;i++){
+    if (i===5) h += '<div class="grp">Friend’s app</div>';
+    h += `<div class="it"><b>${i}.</b><span>${PHONE[i].cap}</span></div>`;
+  }
+  return h + '</div>';
+}
+
+// ---------- state ----------
+let cur = 1, maxReached = 1, free = false;
+const $ = s => document.querySelector(s);
+const ribs = [...document.querySelectorAll('.rib')];
+const stepsEls = [...document.querySelectorAll('.step')];
+const snames = [...document.querySelectorAll('.sname')];
+
+function setState(el, i){
+  el.classList.remove('st-past','st-current','st-future','st-all');
+  if (cur === OVERVIEW) el.classList.add('st-all');
+  else el.classList.add(i < cur ? 'st-past' : i === cur ? 'st-current' : 'st-future');
+}
+
+function render(animate){
+  ribs.forEach(r => setState(r, +r.dataset.step));
+  stepsEls.forEach(s => setState(s, +s.dataset.step));
+  snames.forEach(t => t.classList.toggle('on', cur === OVERVIEW || +t.dataset.step === cur));
+  if (animate && cur !== OVERVIEW){
+    const r = document.getElementById('rib-' + cur);
+    r.classList.remove('anim'); void r.getBoundingClientRect(); r.classList.add('anim');
+  }
+  // caption
+  $('#capBadge').textContent = cur === OVERVIEW ? 'Overview' : 'Step ' + cur + ' of 7';
+  $('#capText').textContent = CAPTIONS[cur];
+  // phone
+  if (cur === OVERVIEW){
+    $('#who').textContent = 'All steps';
+    $('#appbody').innerHTML = overviewBody();
+    $('#phoneCap').innerHTML = '<span>From adding funds to the money arriving in your friend’s bank account.</span>';
+  } else {
+    $('#who').textContent = PHONE[cur].who;
+    $('#appbody').innerHTML = PHONE[cur].body;
+    $('#phoneCap').innerHTML = `<b>${cur}.</b><span>${PHONE[cur].cap}</span>`;
+  }
+  // controls
+  $('#back').disabled = cur === 1;
+  $('#next').disabled = cur === OVERVIEW;
+  $('#next').textContent = cur === 7 ? 'Overview →' : 'Next →';
+  document.querySelectorAll('.dot').forEach(d => {
+    const i = +d.dataset.i;
+    d.classList.toggle('on', i === cur);
+    d.classList.toggle('past', i < cur && cur !== OVERVIEW || (cur === OVERVIEW && i !== OVERVIEW));
+  });
+  $('#hint').textContent = free ? 'Click any step circle to jump to it. Use ← → keys or the buttons.'
+                                 : 'Use the buttons or the ← → arrow keys.';
+  // terms: unlocked by furthest step reached
+  document.querySelectorAll('.term').forEach(t => {
+    const ok = TERMS[t.dataset.term].step <= maxReached;
+    t.classList.toggle('locked', !ok);
+    t.setAttribute('aria-disabled', String(!ok));
+  });
+}
+
+function go(to, method){
+  if (to < 1 || to > OVERVIEW || to === cur) return;
+  const from = cur;
+  closePop('step_change');
+  cur = to;
+  maxReached = Math.max(maxReached, to === OVERVIEW ? 7 : to);
+  if (to === OVERVIEW && !free){ free = true; document.body.classList.add('free'); }
+  log('step_change', {from, to, method});
+  render(true);
+}
+
+$('#back').addEventListener('click', () => go(cur - 1, 'button'));
+$('#next').addEventListener('click', () => go(cur + 1, 'button'));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ closePop('escape'); return; }
+  if (e.shiftKey && (e.key === 'L' || e.key === 'l')){ downloadLog(); return; }
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === 'ArrowRight'){ e.preventDefault(); go(cur + 1, 'key'); }
+  else if (e.key === 'ArrowLeft'){ e.preventDefault(); go(cur - 1, 'key'); }
+  else if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('term')){
+    e.preventDefault(); openTerm(e.target, 'key');
+  }
+});
+stepsEls.forEach(s => s.querySelector('.hit').addEventListener('click', () => {
+  if (free) go(+s.dataset.step, 'circle');
+}));
+$('#logbtn').addEventListener('click', downloadLog);
+
+// ---------- term popups (V2) ----------
+const card = $('.figcard');
+let pop = null, popTerm = null, toastTimer = null;
+function rel(el){
+  const a = el.getBoundingClientRect(), b = card.getBoundingClientRect();
+  return {x:a.left-b.left, y:a.top-b.top, w:a.width, h:a.height};
+}
+function closePop(reason){
+  if (!pop) return;
+  log('term_close', {method:reason, term:TERMS[popTerm].title});
+  pop.remove(); pop = null; popTerm = null;
+}
+function toast(el, msg){
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  card.appendChild(t);
+  const r = rel(el);
+  t.style.left = Math.max(4, r.x + r.w/2 - t.offsetWidth/2) + 'px';
+  t.style.top = (r.y - t.offsetHeight - 6) + 'px';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 1600);
+}
+function openTerm(el, method){
+  const key = el.dataset.term, T = TERMS[key];
+  if (T.step > maxReached){
+    log('term_blocked', {to:cur, method, term:T.title});
+    toast(el, 'Reach step ' + T.step + ' to open this');
+    return;
+  }
+  if (pop && popTerm === key){ closePop('toggle'); return; }
+  closePop('other_term');
+  pop = document.createElement('div'); pop.className = 'pop'; pop.setAttribute('role','dialog');
+  pop.innerHTML = `<button class="x" aria-label="Close">×</button><h3>${T.title}</h3>
+    <div>${T.def}</div>
+    ${T.example ? `<div class="sec"><span class="lab">Example:</span><div class="ex${T.example.startsWith('0x') ? ' hex' : ''}">${T.example}</div></div>` : ''}
+    <div class="sec"><span class="lab">In online banking:</span> ${T.bank}</div>`;
+  card.appendChild(pop); popTerm = key;
+  pop.querySelector('.x').addEventListener('click', () => closePop('close_button'));
+  // try above / left / right / below; take the first spot inside the card that covers
+  // neither the caption, the current step circle, nor the label itself
+  const r = rel(el), cw = card.clientWidth, ch = card.clientHeight, pw = pop.offsetWidth, ph = pop.offsetHeight;
+  const avoid = [rel($('.caption')), r];
+  const curHit = document.querySelector('.step.st-current .hit');
+  if (curHit) avoid.push(rel(curHit));
+  const clampX = x => Math.min(Math.max(8, x), cw - pw - 8);
+  const clampY = y => Math.min(Math.max(8, y), ch - ph - 8);
+  const cands = [
+    {x:clampX(r.x + r.w/2 - pw/2), y:r.y - ph - 8},
+    {x:r.x - pw - 10, y:clampY(r.y + r.h/2 - ph/2)},
+    {x:r.x + r.w + 10, y:clampY(r.y + r.h/2 - ph/2)},
+    {x:clampX(r.x + r.w/2 - pw/2), y:r.y + r.h + 8}];
+  const hits = (c, a) => c.x < a.x + a.w && c.x + pw > a.x && c.y < a.y + a.h && c.y + ph > a.y;
+  const fits = c => c.x >= 4 && c.y >= 4 && c.x + pw <= cw - 4 && c.y + ph <= ch - 4;
+  const pick = cands.find(c => fits(c) && !avoid.some(a => hits(c, a)))
+            || cands.find(c => fits(c) && !hits(c, avoid[0])) || cands[3];
+  pop.style.left = pick.x + 'px'; pop.style.top = pick.y + 'px';
+  log('term_open', {to:cur, method, term:T.title});
+}
+document.querySelectorAll('.term').forEach(t => t.addEventListener('click', e => { e.stopPropagation(); openTerm(t, 'click'); }));
+document.addEventListener('click', e => { if (pop && !pop.contains(e.target)) closePop('outside_click'); });
+
+log('start', {to:1, method:'load'});
+render(true);
+})();
+</script>
+</body></html>
